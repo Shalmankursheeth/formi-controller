@@ -14,6 +14,11 @@ DIMS = ("welcome_message", "voice", "caller_id")
 FEATURES = ("lang", "city_tier", "age_band", "value_band")
 
 
+def bucket(person_id):
+    """Stable 0-9 bucket for holdout/pilot assignment (md5-free: python hash() is salted per process)."""
+    return sum(ord(c) * (i + 1) for i, c in enumerate(person_id)) % 10
+
+
 def segments_of(features):
     yield "all"
     for f in FEATURES:
@@ -26,6 +31,10 @@ class Ingestor:
     def __init__(self, store, sim):
         self.store, self.sim = store, sim
         self.leads = {}  # lead_id -> features (also persisted)
+        # eligible persons (have a computed preferred hour): wf -> {person_id: hour}; rebuilt after restart
+        store.elig = {}
+        for wf, pid, hr in store.db.execute('SELECT workflow_id, person_id, hour FROM person_pref'):
+            store.elig.setdefault(wf, {})[pid] = hr
         for lid, feats in store.db.execute("SELECT lead_id, features FROM leads"):
             self.leads[lid] = json.loads(feats)
 
@@ -34,6 +43,8 @@ class Ingestor:
         hag = defaultdict(lambda: [0, 0, 0])
         new_leads = []
         calls = []
+        ph = defaultdict(lambda: [0, 0])
+        se = defaultdict(lambda: [0, 0])
         self.last_events = 0
         for line in self.sim.chunk_lines(chunk_no):
             ev = json.loads(line)
@@ -47,6 +58,11 @@ class Ingestor:
                 conn, eng = int(ev["connected"]), int(ev["engaged"])
                 hal = int(bool((ev.get("qa") or {}).get("hallucination_flag")))
                 hr = ev["ts"][:13]
+                x = ph[(ev["workflow_id"], ev["person_id"], int(ev["ts"][11:13]))]
+                x[0] += 1; x[1] += conn
+                if ev["person_id"] in self.store.elig.get(ev["workflow_id"], ()):
+                    y = se[(ev["workflow_id"], bucket(ev["person_id"]), day)]
+                    y[0] += 1; y[1] += conn
                 if conn and cursor_key != "hist_chunk":  # C12: what each customer who picked up actually heard
                     v = ev["variant"]
                     calls.append((ev["workflow_id"], ev["ts"], ev["person_id"], ev["lead_id"], ev["config_version"],
@@ -83,6 +99,14 @@ class Ingestor:
                    ON CONFLICT(workflow_id,hour,kind,key) DO UPDATE SET
                    dials=dials+excluded.dials, connected=connected+excluded.connected, halluc=halluc+excluded.halluc""",
                 [(*k, *v) for k, v in hag.items()])
+            db.executemany(
+                """INSERT INTO person_hour VALUES(?,?,?,?,?) ON CONFLICT(workflow_id,person_id,hour) DO UPDATE SET
+                   dials=dials+excluded.dials, connected=connected+excluded.connected""",
+                [(*k, *v) for k, v in ph.items()])
+            db.executemany(
+                """INSERT INTO sched_eval VALUES(?,?,?,?,?) ON CONFLICT(workflow_id,bucket,day) DO UPDATE SET
+                   dials=dials+excluded.dials, connected=connected+excluded.connected""",
+                [(*k, *v) for k, v in se.items()])
             db.executemany("INSERT INTO call_log VALUES(?,?,?,?,?,?,?,?,?,?,?)", calls)
             self.store.set_meta(cursor_key, chunk_no)
             db.execute("COMMIT")

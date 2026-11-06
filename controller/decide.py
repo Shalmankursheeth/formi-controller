@@ -10,21 +10,22 @@ Design (see SUBMISSION.md for reasoning):
   * Own pacing: <=2 proposals/day/workflow, never before 11:00, inside approver hours, one open proposal at a time.
 """
 import copy
+import os
 import json
 from datetime import datetime, timedelta
 
-from . import governance
+from . import call_time, governance
 from .ingest import DIMS, FEATURES
 from .stats import arms, compare, totals, z_crit
 
 OWN = "ep_"
-MIN_DEN = 300          # min observations (denominator) per arm
-MIN_LIFT = 0.03        # min relative lift worth a customer-facing change
+MIN_DEN = int(os.environ.get('EP_MIN_DEN', 300))          # min observations (denominator) per arm
+MIN_LIFT = float(os.environ.get('EP_MIN_LIFT', 0.03))        # min relative lift worth a customer-facing change
 ALPHA = 0.05
 WINDOW_DAYS = 5
 RECENT_DAYS = 2
-EXPLORE_SHARE = 0.25
-HOLDOUT = 0.15
+EXPLORE_SHARE = float(os.environ.get('EP_EXPLORE_SHARE', 0.40))
+HOLDOUT = float(os.environ.get('EP_HOLDOUT', 0.15))
 SUP_FREEZE_DAYS = 3
 
 
@@ -187,6 +188,16 @@ def decide(store, sim, ts, workflows):
         return
     for wid, wf in workflows.items():
         _decide_wf(store, sim, ts, wid, wf)
+        # per-person call time (C4): its own dimension, only when nothing else is in flight for the workflow
+        # (an auto-apply would otherwise make an already-pending approval stale)
+        if store.db.execute("SELECT COUNT(*) FROM proposals WHERE workflow_id=? AND status IN "
+                            "('submitting','pending','approved')", (wid,)).fetchone()[0]:
+            continue
+        today = ts[:10]
+        frozen = {d for d, until in (store.get_meta(f"sup_{wid}", {}) or {}).items() if until > today}
+        sent = store.db.execute("SELECT COUNT(*) FROM proposals WHERE workflow_id=? AND created_ts>=? AND "
+                                "status!='failed'", (wid, _day(ts, 0))).fetchone()[0]
+        call_time.step(store, sim, ts, wid, wf, sim.config(wid), frozen, sent < 2)
 
 
 def _decide_wf(store, sim, ts, wid, wf):

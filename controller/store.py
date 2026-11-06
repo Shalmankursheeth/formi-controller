@@ -30,6 +30,14 @@ CREATE INDEX IF NOT EXISTS call_log_person ON call_log(person_id, ts);
 CREATE TABLE IF NOT EXISTS metrics(
   sim_ts TEXT PRIMARY KEY, wall REAL, events INTEGER, chunks INTEGER, ingest_s REAL, credits REAL,
   sim_errors INTEGER, open_props INTEGER);
+CREATE TABLE IF NOT EXISTS person_hour(
+  workflow_id TEXT, person_id TEXT, hour INTEGER, dials INTEGER DEFAULT 0, connected INTEGER DEFAULT 0,
+  PRIMARY KEY(workflow_id, person_id, hour));
+CREATE TABLE IF NOT EXISTS person_pref(
+  workflow_id TEXT, person_id TEXT, hour INTEGER, PRIMARY KEY(workflow_id, person_id));
+CREATE TABLE IF NOT EXISTS sched_eval(
+  workflow_id TEXT, bucket INTEGER, day TEXT, dials INTEGER DEFAULT 0, connected INTEGER DEFAULT 0,
+  PRIMARY KEY(workflow_id, bucket, day));
 CREATE TABLE IF NOT EXISTS leads(
   lead_id TEXT PRIMARY KEY, workflow_id TEXT, person_id TEXT, day TEXT, features TEXT);
 CREATE TABLE IF NOT EXISTS proposals(

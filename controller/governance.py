@@ -17,8 +17,9 @@ def proposal_id(workflow_id, base_version, proposed_config, sim_day=""):
 
 
 def propose(store, sim, sim_ts, workflow_id, base_version, proposed_config, summary, diff,
-            affected_leads, dry_run, impact_score, rationale, evidence=None, kind="allocation"):
-    pid = proposal_id(workflow_id, base_version, proposed_config, sim_ts[:10])
+            affected_leads, dry_run, impact_score, rationale, evidence=None, kind="allocation", bucket=10):
+    # bucket=10 -> one id per sim day; incidents pass 13 (per hour) so a rejected fix can be retried within the day
+    pid = proposal_id(workflow_id, base_version, proposed_config, sim_ts[:bucket])
     body = {"proposal_id": pid, "workflow_id": workflow_id, "base_version": base_version,
             "proposed_config": proposed_config, "change_summary": summary, "diff": diff,
             "affected_leads": affected_leads, "dry_run": dry_run, "impact_score": impact_score,

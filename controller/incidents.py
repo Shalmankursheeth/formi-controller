@@ -99,7 +99,7 @@ def check_caller_ids(store, sim, ts, wid, wf, cfg_resp):
             {"caller_id": {"from": dist, "to": new}}, d,
             {"method": "concurrent comparison, last %dh" % WINDOW_H, **evidence},
             min(1.0, round((p0 - p1) * 3, 3)), "Spam-flag pattern: pickup collapsed on one ID while peers unchanged.",
-            kind="caller_id")
+            kind="caller_id", bucket=13)
 
 
 def check_hallucination(store, sim, ts, wid, wf, cfg_resp):
@@ -143,7 +143,7 @@ def check_hallucination(store, sim, ts, wid, wf, cfg_resp):
         min(1.0, round(p1 * 10, 3)),
         "Prompt change raised flagged-hallucination rate well above baseline; reverting to the prompt that "
         "previously ran, which passed validation.",
-        evidence={"validation_run_id": val["validation_run_id"]}, kind="prompt_revert")
+        evidence={"validation_run_id": val["validation_run_id"]}, kind="prompt_revert", bucket=13)
 
 
 def fast_checks(store, sim, ts, workflows):
