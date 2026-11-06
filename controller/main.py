@@ -3,6 +3,7 @@
     python -m controller.main --url http://127.0.0.1:8700 --db controller.db
 """
 import argparse
+import sys
 import time
 from datetime import datetime, timedelta
 
@@ -44,6 +45,18 @@ def catch_up(ing, store, sim, kind, key, side):
     return ev, n
 
 
+def guard(store, st, name, fn):
+    """One failing component (e.g. an unexpected scenario shape) must not stop ingestion or the clock: log it to
+    the audit trail and carry on; the next tick retries."""
+    try:
+        return fn()
+    except Exception as e:  # noqa: BLE001
+        import traceback
+        store.audit(st.get("ts", ""), "-", "COMPONENT_ERROR", {"component": name, "error": repr(e),
+                                                                "tb": traceback.format_exc()[-800:]})
+        print(f"COMPONENT_ERROR {name}: {e!r}", file=sys.stderr)
+
+
 def run(url, db, view_out="reports/supervisor.html"):
     sim = Sim(url)
     store = Store(db)
@@ -64,18 +77,18 @@ def run(url, db, view_out="reports/supervisor.html"):
         side.clear()
         st = sim.state()
         reconcile(store, sim, st["ts"])
-        health.record(store, sim, st, ev, n, ingest_s, t0)
-        health.check(store, sim, st, n, budget)
+        guard(store, st, "health", lambda: (health.record(store, sim, st, ev, n, ingest_s, t0),
+                                            health.check(store, sim, st, n, budget)))
         if st.get("finished"):
             break
-        fast_checks(store, sim, st["ts"], wfs)
-        decide(store, sim, st["ts"], wfs)
+        guard(store, st, "fast_checks", lambda: fast_checks(store, sim, st["ts"], wfs))
+        guard(store, st, "decide", lambda: decide(store, sim, st["ts"], wfs))
         if st["ts"][11:16] == "13:00":
-            view.render(store, sim, wfs, st["ts"], view_out)
+            guard(store, st, "view", lambda: view.render(store, sim, wfs, st["ts"], view_out))
         code, resp = sim.advance(TICK_MIN)
         if code == 409:
             break
-    view.render(store, sim, wfs, sim.state()["ts"], view_out)
+    guard(store, sim.state(), "view", lambda: view.render(store, sim, wfs, sim.state()["ts"], view_out))
     print(f"done in {time.time()-t0:.1f}s", sim.state())
 
 
