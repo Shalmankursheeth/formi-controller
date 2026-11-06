@@ -36,7 +36,7 @@ class FakeSim:
 
 
 def _call(i):
-    return json.dumps({"type": "call", "workflow_id": "w", "lead_id": "l1", "ts": "2027-01-04T10:00:00+05:30",
+    return json.dumps({"type": "call", "workflow_id": "w", "lead_id": "l1", "person_id": "p", "cohort_id": "default", "ts": "2027-01-04T10:00:00+05:30",
                        "connected": True, "engaged": i % 2 == 0, "config_version": 1,
                        "variant": {"welcome_message": "W1", "voice": "V1", "caller_id": "D1", "prompt_version": "P1"}})
 

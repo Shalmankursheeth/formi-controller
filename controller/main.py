@@ -6,6 +6,7 @@ import argparse
 import time
 from datetime import datetime, timedelta
 
+from . import health, view
 from .client import Sim
 from .decide import SUP_FREEZE_DAYS, decide
 from .governance import reconcile
@@ -35,11 +36,15 @@ def note_supervisor_edits(store, side):
 
 def catch_up(ing, store, sim, kind, key, side):
     last = store.get_meta(key, -1)
+    n = ev = 0
     for ch in sim.chunks(kind=kind, after=last):
         ing.chunk(ch["chunk"], key, side)
+        n += 1
+        ev += ing.last_events
+    return ev, n
 
 
-def run(url, db):
+def run(url, db, view_out="reports/supervisor.html"):
     sim = Sim(url)
     store = Store(db)
     ing = Ingestor(store, sim)
@@ -48,19 +53,29 @@ def run(url, db):
     side = []
     catch_up(ing, store, sim, "history", "hist_chunk", side)   # C3: lead universe + baseline rates
     side.clear()
+    budget = sim.state().get("credits_remaining")
+    budget = store.get_meta("credit_budget") or budget
+    store.set_meta("credit_budget", budget)
     while True:
-        catch_up(ing, store, sim, "events", "last_chunk", side)  # backlog first (post-crash)
+        t1 = time.time()
+        ev, n = catch_up(ing, store, sim, "events", "last_chunk", side)  # backlog first (post-crash)
+        ingest_s = time.time() - t1
         note_supervisor_edits(store, side)
         side.clear()
         st = sim.state()
         reconcile(store, sim, st["ts"])
+        health.record(store, sim, st, ev, n, ingest_s, t0)
+        health.check(store, sim, st, n, budget)
         if st.get("finished"):
             break
         fast_checks(store, sim, st["ts"], wfs)
         decide(store, sim, st["ts"], wfs)
+        if st["ts"][11:16] == "13:00":
+            view.render(store, sim, wfs, st["ts"], view_out)
         code, resp = sim.advance(TICK_MIN)
         if code == 409:
             break
+    view.render(store, sim, wfs, sim.state()["ts"], view_out)
     print(f"done in {time.time()-t0:.1f}s", sim.state())
 
 
@@ -68,5 +83,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True)
     ap.add_argument("--db", default="controller.db")
+    ap.add_argument("--view-out", default="reports/supervisor.html")
     a = ap.parse_args()
-    run(a.url, a.db)
+    run(a.url, a.db, a.view_out)

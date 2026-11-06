@@ -22,6 +22,14 @@ CREATE TABLE IF NOT EXISTS hourly(
   workflow_id TEXT, hour TEXT, kind TEXT, key TEXT,
   dials INTEGER DEFAULT 0, connected INTEGER DEFAULT 0, halluc INTEGER DEFAULT 0,
   PRIMARY KEY(workflow_id, hour, kind, key));
+CREATE TABLE IF NOT EXISTS call_log(
+  workflow_id TEXT, ts TEXT, person_id TEXT, lead_id TEXT, config_version INTEGER, cohort_id TEXT,
+  welcome TEXT, voice TEXT, caller_id TEXT, prompt TEXT, engaged INTEGER);
+CREATE INDEX IF NOT EXISTS call_log_lead ON call_log(lead_id);
+CREATE INDEX IF NOT EXISTS call_log_person ON call_log(person_id, ts);
+CREATE TABLE IF NOT EXISTS metrics(
+  sim_ts TEXT PRIMARY KEY, wall REAL, events INTEGER, chunks INTEGER, ingest_s REAL, credits REAL,
+  sim_errors INTEGER, open_props INTEGER);
 CREATE TABLE IF NOT EXISTS leads(
   lead_id TEXT PRIMARY KEY, workflow_id TEXT, person_id TEXT, day TEXT, features TEXT);
 CREATE TABLE IF NOT EXISTS proposals(
