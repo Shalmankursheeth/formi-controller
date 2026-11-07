@@ -1,6 +1,6 @@
 # Outcome-First Agent Loop — Submission
 
-**Name:** Mohamed Shalman Kursheeth · **Date:** 2026-11-06 · **Hours actually spent (be honest):** [fill in] · **Language / storage:** Python 3.12, SQLite (WAL), no other stateful infra
+**Name:** Mohamed Shalman Kursheeth · **Date:** 2026-11-06 · **Hours actually spent (be honest):** 8 · **Language / storage:** Python 3.12, SQLite (WAL), no other stateful infra
 
 ---
 
